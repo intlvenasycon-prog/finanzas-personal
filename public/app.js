@@ -135,6 +135,7 @@ const App = {
     this.renderAll();
     this.setDefaultDate();
     document.getElementById('btn-sync-header').addEventListener('click', () => this.syncAll());
+    document.getElementById('btn-reload').addEventListener('click', () => window.location.reload());
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
