@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Finanzas Personal</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#E24B4A" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Finanzas" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+
+    <!-- HEADER -->
+    <header id="header">
+      <div class="header-top">
+        <h1 class="app-title">💰 Finanzas</h1>
+        <button id="btn-sync-header" class="icon-btn" title="Sincronizar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </div>
+      <div id="rates-bar" class="rates-bar">
+        <span class="rate-chip" id="rate-bcv">BCV <span class="rate-val">--</span></span>
+        <span class="rate-chip" id="rate-eur">EUR <span class="rate-val">--</span></span>
+        <span class="rate-chip" id="rate-par">PAR <span class="rate-val">--</span></span>
+      </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main id="main">
+
+      <!-- TAB: INICIO -->
+      <section id="tab-inicio" class="tab-panel active">
+        <div class="section-title">Saldos por cuenta</div>
+        <div id="accounts-grid" class="accounts-grid"></div>
+
+        <div class="totals-row">
+          <div class="total-card">
+            <div class="total-label">Total USD</div>
+            <div class="total-amount" id="total-usd">$0.00</div>
+          </div>
+          <div class="total-card">
+            <div class="total-label">Total Bs</div>
+            <div class="total-amount" id="total-ves">Bs 0.00</div>
+          </div>
+        </div>
+
+        <div class="section-title">Este mes</div>
+        <div class="month-summary">
+          <div class="summary-card income">
+            <div class="summary-icon">↑</div>
+            <div>
+              <div class="summary-label">Ingresos</div>
+              <div class="summary-amount" id="month-income">$0.00</div>
+            </div>
+          </div>
+          <div class="summary-card expense">
+            <div class="summary-icon">↓</div>
+            <div>
+              <div class="summary-label">Gastos</div>
+              <div class="summary-amount" id="month-expense">$0.00</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Últimas transacciones</div>
+        <div id="recent-list" class="tx-list"></div>
+      </section>
+
+      <!-- TAB: REGISTRAR -->
+      <section id="tab-registrar" class="tab-panel">
+        <div class="type-selector">
+          <button class="type-btn active" data-type="expense">Gasto</button>
+          <button class="type-btn" data-type="income">Ingreso</button>
+          <button class="type-btn" data-type="transfer">Transferencia</button>
+        </div>
+
+        <form id="tx-form">
+          <div class="form-group">
+            <label>Cuenta</label>
+            <div id="account-quick-btns" class="quick-btns"></div>
+            <select id="f-account" class="form-select" required>
+              <option value="">Seleccionar cuenta…</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="to-account-group" style="display:none">
+            <label>Cuenta destino</label>
+            <select id="f-to-account" class="form-select">
+              <option value="">Seleccionar cuenta destino…</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Monto</label>
+            <div class="amount-row">
+              <select id="f-currency" class="form-select currency-select">
+                <option value="USD">USD</option>
+                <option value="VES_BCV">Bs (BCV)</option>
+                <option value="EUR">EUR</option>
+                <option value="VES_EUR">Bs (EUR)</option>
+              </select>
+              <input type="number" id="f-amount" class="form-input" placeholder="0.00" min="0" step="0.01" required />
+            </div>
+          </div>
+
+          <div class="form-group" id="usd-equiv-group">
+            <div class="usd-equiv" id="usd-equiv">≈ $0.00 USD (tasa: --)</div>
+          </div>
+
+          <div class="form-group" id="category-group">
+            <label>Categoría</label>
+            <div id="category-chips" class="category-chips"></div>
+            <input type="hidden" id="f-category" />
+          </div>
+
+          <div class="form-group">
+            <label>Fecha</label>
+            <input type="date" id="f-date" class="form-input" required />
+          </div>
+
+          <div class="form-group">
+            <label>Nota (opcional)</label>
+            <input type="text" id="f-note" class="form-input" placeholder="Descripción…" maxlength="120" />
+          </div>
+
+          <button type="submit" class="btn-primary">Registrar</button>
+        </form>
+      </section>
+
+      <!-- TAB: CUENTAS -->
+      <section id="tab-cuentas" class="tab-panel">
+        <div id="accounts-list" class="accounts-detail-list"></div>
+        <button id="btn-add-account" class="btn-secondary">+ Agregar cuenta</button>
+
+        <div id="tx-history" class="tx-history">
+          <div class="section-title" id="tx-history-title">Todas las transacciones</div>
+          <div id="tx-history-list" class="tx-list"></div>
+        </div>
+      </section>
+
+      <!-- TAB: REPORTES -->
+      <section id="tab-reportes" class="tab-panel">
+        <div class="section-title">Gastos por categoría</div>
+        <div class="chart-container">
+          <canvas id="chart-pie"></canvas>
+        </div>
+        <div id="pie-legend" class="pie-legend"></div>
+
+        <div class="section-title">Balance mensual (6 meses)</div>
+        <div class="chart-container">
+          <canvas id="chart-bar"></canvas>
+        </div>
+      </section>
+
+      <!-- TAB: CONFIG -->
+      <section id="tab-config" class="tab-panel">
+        <div class="section-title">Google Sheets</div>
+        <div class="config-card">
+          <p class="config-desc">Ingresa la URL de tu Google Apps Script para sincronizar con Google Sheets.</p>
+          <div class="form-group">
+            <label>URL del Apps Script</label>
+            <input type="url" id="c-sheets-url" class="form-input" placeholder="https://script.google.com/macros/s/…/exec" />
+          </div>
+          <button id="btn-save-config" class="btn-primary">Guardar</button>
+        </div>
+
+        <div class="config-card">
+          <div class="section-title">Sincronización</div>
+          <button id="btn-sync-all" class="btn-secondary">☁️ Sincronizar todo</button>
+          <button id="btn-restore" class="btn-secondary" style="margin-top:8px">⬇️ Restaurar desde Sheets</button>
+          <div id="sync-status" class="sync-status"></div>
+        </div>
+
+        <div class="config-card">
+          <div class="section-title">Código Apps Script</div>
+          <p class="config-desc">Crea un nuevo Apps Script en tu Google Sheet y pega este código:</p>
+          <pre id="apps-script-code" class="code-block"></pre>
+          <button id="btn-copy-script" class="btn-secondary">📋 Copiar código</button>
+        </div>
+
+        <div class="config-card">
+          <div class="section-title">Datos locales</div>
+          <button id="btn-export-json" class="btn-secondary">⬇️ Exportar JSON</button>
+          <button id="btn-import-json" class="btn-secondary" style="margin-top:8px">⬆️ Importar JSON</button>
+          <input type="file" id="import-file" accept=".json" style="display:none" />
+          <button id="btn-clear-data" class="btn-danger" style="margin-top:8px">🗑️ Borrar todos los datos</button>
+        </div>
+
+        <div class="config-card">
+          <div class="section-title">Acerca de</div>
+          <p class="config-desc">Finanzas Personal v1.0 — App PWA para control de finanzas en Venezuela.</p>
+          <p class="config-desc" id="last-sync-info"></p>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- BOTTOM TAB BAR -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="inicio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Inicio</span>
+      </button>
+      <button class="tab-btn" data-tab="registrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span>Registrar</span>
+      </button>
+      <button class="tab-btn" data-tab="cuentas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <span>Cuentas</span>
+      </button>
+      <button class="tab-btn" data-tab="reportes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Reportes</span>
+      </button>
+      <button class="tab-btn" data-tab="config">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span>Config</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- MODAL -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal-box" class="modal-box">
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

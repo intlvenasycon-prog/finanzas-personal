@@ -1,0 +1,14 @@
+{
+  "name": "finanzas-personal",
+  "version": "1.0.0",
+  "description": "App de finanzas personales para Venezuela",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "netlify dev"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
