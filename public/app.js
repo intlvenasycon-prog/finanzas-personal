@@ -141,16 +141,15 @@ const App = {
     // Auto-pull from Sheets on app open
     await this.pullFromSheets({ silent: true });
     await this.fetchRates();
-    // Auto-pull when app comes back to foreground (works on iOS PWA)
+    // Auto-pull: events + polling every 60s (cubre iOS PWA que no dispara eventos)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') this.pullFromSheets({ silent: true });
     });
     window.addEventListener('pageshow', (e) => {
       if (e.persisted) this.pullFromSheets({ silent: true });
     });
-    window.addEventListener('focus', () => {
-      this.pullFromSheets({ silent: true });
-    });
+    window.addEventListener('focus', () => this.pullFromSheets({ silent: true }));
+    setInterval(() => this.pullFromSheets({ silent: true }), 60000);
   },
 
   renderAll() {
@@ -288,14 +287,17 @@ const App = {
     const grid = document.getElementById('accounts-grid');
     grid.innerHTML = '';
     for (const acc of this.state.accounts) {
-      const bal = this.getAccountBalance(acc.id);
-      const isNeg = acc.type === 'credit' ? bal < 0 : bal < 0;
+      const bal    = this.getAccountBalance(acc.id);
+      const isVES  = acc.currency === 'VES';
+      const rate   = this.state.rates.bcvUsd;
+      const usdVal = isVES && rate ? bal / rate : bal;
+      const isNeg  = usdVal < 0;
       const div = document.createElement('div');
       div.className = 'account-card';
       div.innerHTML = `
         <div class="acc-name">${acc.emoji || '💳'} ${acc.name}</div>
-        <div class="acc-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? this.fmtVES(bal) : this.fmtUSD(bal)}</div>
-        <div class="acc-type">${acc.currency === 'VES' && this.state.rates.bcvUsd ? `≈ ${this.fmtUSD(bal / this.state.rates.bcvUsd)} · ` : ''}${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'VES' : acc.currency}</div>
+        <div class="acc-balance ${isNeg ? 'negative' : ''}">${this.fmtUSD(usdVal)}</div>
+        <div class="acc-type">${isVES ? `${this.fmtVES(bal)} · ` : ''}${acc.type === 'credit' ? 'Crédito' : 'Débito'}</div>
       `;
       div.addEventListener('click', () => {
         this.switchTab('cuentas');
@@ -309,15 +311,18 @@ const App = {
   renderTotals() {
     let totalUSD = 0;
     let totalVES = 0;
+    const rate = this.state.rates.bcvUsd;
     for (const acc of this.state.accounts) {
       const bal = this.getAccountBalance(acc.id);
-      totalUSD += bal;
-      if (acc.currency === 'VES' && this.state.rates.bcvUsd) {
-        totalVES += bal * this.state.rates.bcvUsd;
+      if (acc.currency === 'VES') {
+        totalVES += bal;
+        if (rate) totalUSD += bal / rate;
+      } else {
+        totalUSD += bal;
       }
     }
     document.getElementById('total-usd').textContent = this.fmtUSD(totalUSD);
-    document.getElementById('total-ves').textContent = `Bs ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    document.getElementById('total-ves').textContent = this.fmtVES(totalVES);
   },
 
   renderMonthSummary() {
@@ -583,8 +588,9 @@ const App = {
             <div class="acc-detail-meta">${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'Bolívares' : acc.currency}</div>
           </div>
           <div class="acc-detail-balance ${isNeg ? 'negative' : ''}">
-            ${acc.currency === 'VES' ? this.fmtVES(bal) : this.fmtUSD(bal)}
-            ${acc.currency === 'VES' && this.state.rates.bcvUsd ? `<small style="display:block;font-size:.72rem;font-weight:400;color:var(--text3)">≈ ${this.fmtUSD(bal / this.state.rates.bcvUsd)}</small>` : ''}
+            ${acc.currency === 'VES' && this.state.rates.bcvUsd
+              ? `${this.fmtUSD(bal / this.state.rates.bcvUsd)}<small style="display:block;font-size:.72rem;font-weight:400;color:var(--text3)">${this.fmtVES(bal)}</small>`
+              : this.fmtUSD(bal)}
           </div>
           <div class="acc-actions">
             <button class="acc-action-btn" data-action="filter" data-id="${acc.id}">Ver txs</button>
