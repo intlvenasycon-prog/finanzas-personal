@@ -141,11 +141,15 @@ const App = {
     // Auto-pull from Sheets on app open
     await this.pullFromSheets({ silent: true });
     await this.fetchRates();
-    // Auto-pull when app comes back to foreground
+    // Auto-pull when app comes back to foreground (works on iOS PWA)
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        this.pullFromSheets({ silent: true });
-      }
+      if (document.visibilityState === 'visible') this.pullFromSheets({ silent: true });
+    });
+    window.addEventListener('pageshow', (e) => {
+      if (e.persisted) this.pullFromSheets({ silent: true });
+    });
+    window.addEventListener('focus', () => {
+      this.pullFromSheets({ silent: true });
     });
   },
 
@@ -206,7 +210,7 @@ const App = {
 
   renderRates() {
     const r = this.state.rates;
-    const fmt = v => v ? `Bs ${v.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
+    const fmt = v => v ? `Bs ${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
     document.querySelector('#rate-bcv .rate-val').textContent = fmt(r.bcvUsd);
     document.querySelector('#rate-eur .rate-val').textContent = fmt(r.bcvEur);
     document.querySelector('#rate-par .rate-val').textContent = fmt(r.paralelo);
@@ -229,11 +233,13 @@ const App = {
   },
 
   fmtAmt(amount, currency) {
-    if (currency === 'USD') return `$${Math.abs(amount).toFixed(2)}`;
-    if (currency === 'EUR') return `€${Math.abs(amount).toFixed(2)}`;
+    const abs = Math.abs(amount);
+    const fmtNum = (n, dec = 2) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    if (currency === 'USD') return `$${fmtNum(abs)}`;
+    if (currency === 'EUR') return `€${fmtNum(abs)}`;
     if (currency === 'VES_BCV' || currency === 'VES_EUR' || currency === 'VES')
-      return `Bs ${Math.abs(amount).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    return `${Math.abs(amount).toFixed(2)}`;
+      return `Bs ${fmtNum(abs, 2)}`;
+    return fmtNum(abs);
   },
 
   uid() {
@@ -241,13 +247,17 @@ const App = {
   },
 
   getAccountBalance(accountId) {
+    const acc = this.getAccountInfo(accountId);
+    const isVES = acc?.currency === 'VES';
     let balance = 0;
     for (const tx of this.state.transactions) {
-      if (tx.type === 'expense' && tx.account === accountId) balance -= tx.amountUSD;
-      if (tx.type === 'income'  && tx.account === accountId) balance += tx.amountUSD;
+      // VES accounts: use original amount in Bs; others: use USD equivalent
+      const val = isVES ? tx.amount : tx.amountUSD;
+      if (tx.type === 'expense' && tx.account === accountId) balance -= val;
+      if (tx.type === 'income'  && tx.account === accountId) balance += val;
       if (tx.type === 'transfer') {
-        if (tx.account   === accountId) balance -= tx.amountUSD;
-        if (tx.toAccount === accountId) balance += tx.amountUSD;
+        if (tx.account   === accountId) balance -= val;
+        if (tx.toAccount === accountId) balance += val;
       }
     }
     return balance;
@@ -280,7 +290,7 @@ const App = {
       div.className = 'account-card';
       div.innerHTML = `
         <div class="acc-name">${acc.emoji || '💳'} ${acc.name}</div>
-        <div class="acc-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toFixed(0)}` : this.fmtUSD(bal)}</div>
+        <div class="acc-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : this.fmtUSD(bal)}</div>
         <div class="acc-type">${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'VES' : acc.currency}</div>
       `;
       div.addEventListener('click', () => {
@@ -303,7 +313,7 @@ const App = {
       }
     }
     document.getElementById('total-usd').textContent = this.fmtUSD(totalUSD);
-    document.getElementById('total-ves').textContent = `Bs ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('total-ves').textContent = `Bs ${totalVES.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   },
 
   renderMonthSummary() {
@@ -568,7 +578,7 @@ const App = {
             <div class="acc-detail-name">${acc.name}</div>
             <div class="acc-detail-meta">${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'Bolívares' : acc.currency}</div>
           </div>
-          <div class="acc-detail-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toFixed(0)}` : this.fmtUSD(bal)}</div>
+          <div class="acc-detail-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : this.fmtUSD(bal)}</div>
           <div class="acc-actions">
             <button class="acc-action-btn" data-action="filter" data-id="${acc.id}">Ver txs</button>
             ${!DEFAULT_ACCOUNTS.find(d => d.id === acc.id) ? `<button class="acc-action-btn" data-action="delete" data-id="${acc.id}">Eliminar</button>` : ''}
