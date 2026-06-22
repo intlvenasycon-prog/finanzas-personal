@@ -17,8 +17,13 @@ export const handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Tipo inválido' }) };
   }
 
+  // EUR lives under /v1/euros/oficial, USD variants under /v1/dolares/<type>
+  const url = type === 'euro'
+    ? 'https://ve.dolarapi.com/v1/euros/oficial'
+    : `https://ve.dolarapi.com/v1/dolares/${type}`;
+
   try {
-    const res = await fetch(`https://ve.dolarapi.com/v1/dolares/${type}`, {
+    const res = await fetch(url, {
       headers: { 'User-Agent': 'finanzas-personal/1.0' },
     });
 
