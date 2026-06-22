@@ -210,7 +210,7 @@ const App = {
 
   renderRates() {
     const r = this.state.rates;
-    const fmt = v => v ? `Bs ${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
+    const fmt = v => v ? `Bs ${v.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '--';
     document.querySelector('#rate-bcv .rate-val').textContent = fmt(r.bcvUsd);
     document.querySelector('#rate-eur .rate-val').textContent = fmt(r.bcvEur);
     document.querySelector('#rate-par .rate-val').textContent = fmt(r.paralelo);
@@ -229,17 +229,21 @@ const App = {
   },
 
   fmtUSD(v) {
-    return `$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `$${Math.abs(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   },
 
   fmtAmt(amount, currency) {
     const abs = Math.abs(amount);
-    const fmtNum = (n, dec = 2) => n.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+    const fmtNum = (n, dec = 2) => n.toLocaleString('es-VE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
     if (currency === 'USD') return `$${fmtNum(abs)}`;
     if (currency === 'EUR') return `€${fmtNum(abs)}`;
     if (currency === 'VES_BCV' || currency === 'VES_EUR' || currency === 'VES')
-      return `Bs ${fmtNum(abs, 2)}`;
+      return `Bs ${fmtNum(abs)}`;
     return fmtNum(abs);
+  },
+
+  fmtVES(v) {
+    return `Bs ${Math.abs(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   },
 
   uid() {
@@ -290,8 +294,8 @@ const App = {
       div.className = 'account-card';
       div.innerHTML = `
         <div class="acc-name">${acc.emoji || '💳'} ${acc.name}</div>
-        <div class="acc-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : this.fmtUSD(bal)}</div>
-        <div class="acc-type">${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'VES' : acc.currency}</div>
+        <div class="acc-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? this.fmtVES(bal) : this.fmtUSD(bal)}</div>
+        <div class="acc-type">${acc.currency === 'VES' && this.state.rates.bcvUsd ? `≈ ${this.fmtUSD(bal / this.state.rates.bcvUsd)} · ` : ''}${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'VES' : acc.currency}</div>
       `;
       div.addEventListener('click', () => {
         this.switchTab('cuentas');
@@ -313,7 +317,7 @@ const App = {
       }
     }
     document.getElementById('total-usd').textContent = this.fmtUSD(totalUSD);
-    document.getElementById('total-ves').textContent = `Bs ${totalVES.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    document.getElementById('total-ves').textContent = `Bs ${totalVES.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   },
 
   renderMonthSummary() {
@@ -373,7 +377,7 @@ const App = {
       <div class="modal-row"><span class="label">Tipo</span><span class="value">${typeLabel}</span></div>
       <div class="modal-row"><span class="label">Monto</span><span class="value">${this.fmtAmt(tx.amount, tx.currency)}</span></div>
       <div class="modal-row"><span class="label">En USD</span><span class="value">${this.fmtUSD(tx.amountUSD)}</span></div>
-      ${tx.rate ? `<div class="modal-row"><span class="label">Tasa usada</span><span class="value">Bs ${tx.rate.toFixed(2)}</span></div>` : ''}
+      ${tx.rate ? `<div class="modal-row"><span class="label">Tasa usada</span><span class="value">Bs ${tx.rate.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>` : ''}
       <div class="modal-row"><span class="label">Cuenta</span><span class="value">${acc?.name || '?'}</span></div>
       ${tx.toAccount ? `<div class="modal-row"><span class="label">Destino</span><span class="value">${this.getAccountInfo(tx.toAccount)?.name || '?'}</span></div>` : ''}
       <div class="modal-row"><span class="label">Fecha</span><span class="value">${tx.date}</span></div>
@@ -494,8 +498,8 @@ const App = {
       return;
     }
     const rateLabel = {
-      bcvUsd: `BCV: Bs ${r.bcvUsd?.toFixed(2)}`,
-      bcvEur: `BCV EUR: Bs ${r.bcvEur?.toFixed(2)}`,
+      bcvUsd: `BCV: Bs ${r.bcvUsd?.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      bcvEur: `BCV EUR: Bs ${r.bcvEur?.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       usd:    'Sin conversión',
     }[result.rateType] || '';
     el.textContent = `≈ ${this.fmtUSD(result.usd)} USD (${rateLabel})`;
@@ -578,7 +582,10 @@ const App = {
             <div class="acc-detail-name">${acc.name}</div>
             <div class="acc-detail-meta">${acc.type === 'credit' ? 'Crédito' : 'Débito'} · ${acc.currency === 'VES' ? 'Bolívares' : acc.currency}</div>
           </div>
-          <div class="acc-detail-balance ${isNeg ? 'negative' : ''}">${acc.currency === 'VES' ? `Bs ${bal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : this.fmtUSD(bal)}</div>
+          <div class="acc-detail-balance ${isNeg ? 'negative' : ''}">
+            ${acc.currency === 'VES' ? this.fmtVES(bal) : this.fmtUSD(bal)}
+            ${acc.currency === 'VES' && this.state.rates.bcvUsd ? `<small style="display:block;font-size:.72rem;font-weight:400;color:var(--text3)">≈ ${this.fmtUSD(bal / this.state.rates.bcvUsd)}</small>` : ''}
+          </div>
           <div class="acc-actions">
             <button class="acc-action-btn" data-action="filter" data-id="${acc.id}">Ver txs</button>
             ${!DEFAULT_ACCOUNTS.find(d => d.id === acc.id) ? `<button class="acc-action-btn" data-action="delete" data-id="${acc.id}">Eliminar</button>` : ''}
