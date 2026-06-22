@@ -526,6 +526,11 @@ const App = {
     this.state.transactions.push(tx);
     State.save(this.state);
 
+    // Auto-sync in background if configured
+    if (this.state.config.sheetsUrl) {
+      this.syncAll({ silent: true });
+    }
+
     // Reset form
     document.getElementById('f-amount').value = '';
     document.getElementById('f-note').value   = '';
@@ -814,12 +819,15 @@ const App = {
   },
 
   // ── Sync ─────────────────────────────────────────────────
-  async syncAll() {
+  async syncAll({ silent = false } = {}) {
     const url = this.state.config.sheetsUrl;
-    if (!url) { this.toast('Configura la URL de Google Sheets primero'); this.switchTab('config'); return; }
+    if (!url) {
+      if (!silent) { this.toast('Configura la URL de Google Sheets primero'); this.switchTab('config'); }
+      return;
+    }
 
     const statusEl = document.getElementById('sync-status');
-    statusEl.textContent = '⏳ Sincronizando…';
+    if (!silent) statusEl.textContent = '⏳ Sincronizando…';
 
     try {
       const res = await fetch('/api/sheets', {
@@ -834,11 +842,15 @@ const App = {
       this.state.config.lastSync = new Date().toISOString();
       State.save(this.state);
       this.renderConfig();
-      statusEl.textContent = '✓ Sincronizado correctamente';
-      this.toast('✓ Datos enviados a Sheets');
+      if (!silent) {
+        statusEl.textContent = '✓ Sincronizado correctamente';
+        this.toast('✓ Datos enviados a Sheets');
+      }
     } catch (err) {
-      statusEl.textContent = `✗ Error: ${err.message}`;
-      this.toast('Error al sincronizar');
+      if (!silent) {
+        statusEl.textContent = `✗ Error: ${err.message}`;
+        this.toast('Error al sincronizar');
+      }
     }
   },
 
