@@ -138,7 +138,15 @@ const App = {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+    // Auto-pull from Sheets on app open
+    await this.pullFromSheets({ silent: true });
     await this.fetchRates();
+    // Auto-pull when app comes back to foreground
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.pullFromSheets({ silent: true });
+      }
+    });
   },
 
   renderAll() {
@@ -819,6 +827,36 @@ const App = {
   },
 
   // ── Sync ─────────────────────────────────────────────────
+  async pullFromSheets({ silent = false } = {}) {
+    const url = this.state.config.sheetsUrl;
+    if (!url) return;
+    try {
+      const res = await fetch('/api/sheets', { headers: { 'X-Sheets-Url': url } });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.transactions) return;
+
+      // Merge: keep local transactions not in Sheets, add Sheets ones not local
+      const localIds  = new Set(this.state.transactions.map(t => t.id));
+      const sheetsIds = new Set(data.transactions.map(t => t.id));
+
+      const onlyLocal  = this.state.transactions.filter(t => !sheetsIds.has(t.id));
+      const fromSheets = data.transactions.filter(t => !localIds.has(t.id));
+
+      if (fromSheets.length === 0 && onlyLocal.length === 0) return;
+
+      this.state.transactions = [...data.transactions, ...onlyLocal];
+      if (data.accounts && data.accounts.length) this.state.accounts = data.accounts;
+      State.save(this.state);
+      this.renderAll();
+      if (!silent && fromSheets.length > 0) {
+        this.toast(`↓ ${fromSheets.length} transacción(es) nueva(s) desde Sheets`);
+      }
+      // Push merged state back so Sheets stays complete
+      if (onlyLocal.length > 0) this.syncAll({ silent: true });
+    } catch { /* sin conexión, ignorar */ }
+  },
+
   async syncAll({ silent = false } = {}) {
     const url = this.state.config.sheetsUrl;
     if (!url) {
