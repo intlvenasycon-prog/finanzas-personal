@@ -131,7 +131,8 @@ const App = {
   selectedAccount: null,
   selectedCategory: null,
   txFilterAccount: null,
-  txFilterMonth: null,
+  txFilterDateFrom: null,
+  txFilterDateTo: null,
   txFilterType: null,
   txFilterCategory: null,
   txFilterText: '',
@@ -637,15 +638,22 @@ const App = {
     const existing = document.getElementById('tx-filters');
     if (existing) existing.remove();
 
-    const now = new Date();
-    const months = [{ val: null, label: 'Todos' }];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      months.push({
-        val: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        label: d.toLocaleString('es', { month: 'short', year: '2-digit' }),
-      });
-    }
+    const now   = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const ym    = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const ymd   = (d) => d.toISOString().slice(0, 10);
+
+    const quickRanges = [
+      { label: 'Todo',        from: null,  to: null },
+      { label: 'Hoy',         from: today, to: today },
+      { label: 'Esta semana', from: ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay())), to: today },
+      { label: 'Este mes',    from: `${ym(now)}-01`, to: today },
+      { label: 'Mes anterior',from: `${ym(new Date(now.getFullYear(), now.getMonth() - 1, 1))}-01`,
+                               to: `${ym(new Date(now.getFullYear(), now.getMonth(), 0))}-${String(new Date(now.getFullYear(), now.getMonth(), 0).getDate()).padStart(2,'0')}` },
+      { label: 'Este año',    from: `${now.getFullYear()}-01-01`, to: today },
+    ];
+
+    const isQuickActive = (q) => this.txFilterDateFrom === q.from && this.txFilterDateTo === q.to;
 
     const allCats = [...EXPENSE_CATS, ...INCOME_CATS.filter(c => !EXPENSE_CATS.find(e => e.id === c.id))];
 
@@ -662,8 +670,20 @@ const App = {
         <button class="filter-chip${this.txFilterType === 'transfer' ? ' active' : ''}" data-ftype="transfer">Transf.</button>
       </div>
 
-      <div class="filter-row" id="month-chips">
-        ${months.map(m => `<button class="filter-chip${this.txFilterMonth === m.val ? ' active' : ''}" data-month="${m.val ?? ''}">${m.label}</button>`).join('')}
+      <div class="filter-row" id="quick-range-chips">
+        ${quickRanges.map((q, i) => `<button class="filter-chip${isQuickActive(q) ? ' active' : ''}" data-qi="${i}">${q.label}</button>`).join('')}
+      </div>
+
+      <div class="date-range-row">
+        <div class="date-range-group">
+          <label>Desde</label>
+          <input type="date" id="f-date-from" class="form-input" value="${this.txFilterDateFrom || ''}" />
+        </div>
+        <div class="date-range-sep">—</div>
+        <div class="date-range-group">
+          <label>Hasta</label>
+          <input type="date" id="f-date-to" class="form-input" value="${this.txFilterDateTo || ''}" />
+        </div>
       </div>
 
       <div class="filter-row" id="cat-chips-filter">
@@ -687,12 +707,28 @@ const App = {
       });
     });
 
-    wrap.querySelectorAll('[data-month]').forEach(btn => {
+    wrap.querySelectorAll('[data-qi]').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.txFilterMonth = btn.dataset.month || null;
-        wrap.querySelectorAll('[data-month]').forEach(b => b.classList.toggle('active', b === btn));
+        const q = quickRanges[parseInt(btn.dataset.qi)];
+        this.txFilterDateFrom = q.from;
+        this.txFilterDateTo   = q.to;
+        document.getElementById('f-date-from').value = q.from || '';
+        document.getElementById('f-date-to').value   = q.to   || '';
+        wrap.querySelectorAll('[data-qi]').forEach(b => b.classList.toggle('active', b === btn));
         this.renderTxHistory();
       });
+    });
+
+    document.getElementById('f-date-from').addEventListener('change', e => {
+      this.txFilterDateFrom = e.target.value || null;
+      wrap.querySelectorAll('[data-qi]').forEach(b => b.classList.remove('active'));
+      this.renderTxHistory();
+    });
+
+    document.getElementById('f-date-to').addEventListener('change', e => {
+      this.txFilterDateTo = e.target.value || null;
+      wrap.querySelectorAll('[data-qi]').forEach(b => b.classList.remove('active'));
+      this.renderTxHistory();
     });
 
     wrap.querySelectorAll('[data-cat]').forEach(btn => {
@@ -708,7 +744,8 @@ const App = {
     return this.state.transactions
       .filter(tx => {
         if (this.txFilterAccount && tx.account !== this.txFilterAccount && tx.toAccount !== this.txFilterAccount) return false;
-        if (this.txFilterMonth && !tx.date.startsWith(this.txFilterMonth)) return false;
+        if (this.txFilterDateFrom && tx.date < this.txFilterDateFrom) return false;
+        if (this.txFilterDateTo   && tx.date > this.txFilterDateTo)   return false;
         if (this.txFilterType && tx.type !== this.txFilterType) return false;
         if (this.txFilterCategory && tx.category !== this.txFilterCategory) return false;
         if (this.txFilterText) {
