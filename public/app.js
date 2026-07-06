@@ -4,24 +4,30 @@
    CONSTANTS
 ═══════════════════════════════════════════════════════════ */
 const EXPENSE_CATS = [
-  { id: 'food',     label: 'Comida',        icon: '🍔' },
-  { id: 'health',   label: 'Salud',         icon: '💊' },
-  { id: 'fun',      label: 'Entretenimiento',icon: '🎬' },
-  { id: 'shopping', label: 'Shopping',      icon: '🛍️' },
-  { id: 'transport',label: 'Transporte',    icon: '🚗' },
-  { id: 'data',     label: 'Data',          icon: '📶' },
-  { id: 'subs',     label: 'Membresías',    icon: '📱' },
-  { id: 'travel',   label: 'Viajes',        icon: '✈️' },
-  { id: 'invest',   label: 'Inversiones',   icon: '📈' },
-  { id: 'other',    label: 'Otros',         icon: '📌' },
+  { id: 'food',      label: 'Comida',         icon: '🍔' },
+  { id: 'health',    label: 'Salud',          icon: '💊' },
+  { id: 'fun',       label: 'Entretenimiento',icon: '🎬' },
+  { id: 'shopping',  label: 'Shopping',       icon: '🛍️' },
+  { id: 'transport', label: 'Transporte',     icon: '🚗' },
+  { id: 'data',      label: 'Data',           icon: '📶' },
+  { id: 'subs',      label: 'Membresías',     icon: '📱' },
+  { id: 'travel',    label: 'Viajes',         icon: '✈️' },
+  { id: 'invest',    label: 'Inversiones',    icon: '📈' },
+  { id: 'bets',      label: 'Apuestas',       icon: '🎲' },
+  { id: 'comision',  label: 'Comisiones',     icon: '💸' },
+  { id: 'bankfee',   label: 'Intereses banco',icon: '🏦' },
+  { id: 'other',     label: 'Otros',          icon: '📌' },
 ];
 
 const INCOME_CATS = [
-  { id: 'papa',     label: 'Depósito papá', icon: '👨‍👦' },
-  { id: 'salary',   label: 'Salario',       icon: '💼' },
-  { id: 'freelance',label: 'Freelance',     icon: '💻' },
-  { id: 'inv-in',   label: 'Inversión',     icon: '📈' },
-  { id: 'other-in', label: 'Otros',         icon: '💰' },
+  { id: 'papa',      label: 'Depósito papá',  icon: '👨‍👦' },
+  { id: 'salary',    label: 'Salario',        icon: '💼' },
+  { id: 'freelance', label: 'Freelance',      icon: '💻' },
+  { id: 'inv-in',    label: 'Inversión',      icon: '📈' },
+  { id: 'bets-in',   label: 'Apuestas',       icon: '🎲' },
+  { id: 'comision-in',label: 'Comisiones',    icon: '💸' },
+  { id: 'interest',  label: 'Intereses banco',icon: '🏦' },
+  { id: 'other-in',  label: 'Otros',          icon: '💰' },
 ];
 
 const DEFAULT_ACCOUNTS = [
@@ -125,6 +131,10 @@ const App = {
   selectedAccount: null,
   selectedCategory: null,
   txFilterAccount: null,
+  txFilterMonth: null,
+  txFilterType: null,
+  txFilterCategory: null,
+  txFilterText: '',
 
   // ── Init ────────────────────────────────────────────────
   async init() {
@@ -136,6 +146,7 @@ const App = {
     this.setDefaultDate();
     document.getElementById('btn-sync-header').addEventListener('click', () => this.syncAll());
     document.getElementById('btn-reload').addEventListener('click', () => window.location.reload());
+    document.getElementById('btn-calc').addEventListener('click', () => this.showCalculator());
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
@@ -579,7 +590,7 @@ const App = {
   renderAccountsTab() {
     const list = document.getElementById('accounts-list');
     list.innerHTML = this.state.accounts.map(acc => {
-      const bal = this.getAccountBalance(acc.id);
+      const bal   = this.getAccountBalance(acc.id);
       const isNeg = bal < 0;
       return `
         <div class="account-detail-card">
@@ -618,25 +629,125 @@ const App = {
     });
 
     document.getElementById('btn-add-account').addEventListener('click', () => this.showAddAccountModal(), { once: true });
-
+    this.renderTxFilters();
     this.renderTxHistory();
   },
 
-  renderTxHistory() {
-    const titleEl = document.getElementById('tx-history-title');
-    const listEl  = document.getElementById('tx-history-list');
+  renderTxFilters() {
+    const existing = document.getElementById('tx-filters');
+    if (existing) existing.remove();
 
-    let txs = [...this.state.transactions].sort((a, b) => b.createdAt - a.createdAt);
-    if (this.txFilterAccount) {
-      const acc = this.getAccountInfo(this.txFilterAccount);
-      titleEl.textContent = acc ? `Transacciones — ${acc.name}` : 'Transacciones';
-      txs = txs.filter(t => t.account === this.txFilterAccount || t.toAccount === this.txFilterAccount);
-    } else {
-      titleEl.textContent = 'Todas las transacciones';
+    const now = new Date();
+    const months = [{ val: null, label: 'Todos' }];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        val: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        label: d.toLocaleString('es', { month: 'short', year: '2-digit' }),
+      });
     }
 
+    const allCats = [...EXPENSE_CATS, ...INCOME_CATS.filter(c => !EXPENSE_CATS.find(e => e.id === c.id))];
+
+    const wrap = document.createElement('div');
+    wrap.id = 'tx-filters';
+    wrap.className = 'tx-filters-wrap';
+    wrap.innerHTML = `
+      <input type="search" id="f-tx-search" class="form-input" placeholder="🔍 Buscar por nota o categoría…" value="${this.txFilterText}" />
+
+      <div class="filter-row">
+        <button class="filter-chip${!this.txFilterType ? ' active' : ''}" data-ftype="">Todos</button>
+        <button class="filter-chip${this.txFilterType === 'expense' ? ' active' : ''}" data-ftype="expense">Gastos</button>
+        <button class="filter-chip${this.txFilterType === 'income' ? ' active' : ''}" data-ftype="income">Ingresos</button>
+        <button class="filter-chip${this.txFilterType === 'transfer' ? ' active' : ''}" data-ftype="transfer">Transf.</button>
+      </div>
+
+      <div class="filter-row" id="month-chips">
+        ${months.map(m => `<button class="filter-chip${this.txFilterMonth === m.val ? ' active' : ''}" data-month="${m.val ?? ''}">${m.label}</button>`).join('')}
+      </div>
+
+      <div class="filter-row" id="cat-chips-filter">
+        <button class="filter-chip${!this.txFilterCategory ? ' active' : ''}" data-cat="">Todas</button>
+        ${allCats.map(c => `<button class="filter-chip${this.txFilterCategory === c.id ? ' active' : ''}" data-cat="${c.id}">${c.icon} ${c.label}</button>`).join('')}
+      </div>
+    `;
+
+    document.getElementById('tx-history').prepend(wrap);
+
+    document.getElementById('f-tx-search').addEventListener('input', e => {
+      this.txFilterText = e.target.value;
+      this.renderTxHistory();
+    });
+
+    wrap.querySelectorAll('[data-ftype]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.txFilterType = btn.dataset.ftype || null;
+        wrap.querySelectorAll('[data-ftype]').forEach(b => b.classList.toggle('active', b === btn));
+        this.renderTxHistory();
+      });
+    });
+
+    wrap.querySelectorAll('[data-month]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.txFilterMonth = btn.dataset.month || null;
+        wrap.querySelectorAll('[data-month]').forEach(b => b.classList.toggle('active', b === btn));
+        this.renderTxHistory();
+      });
+    });
+
+    wrap.querySelectorAll('[data-cat]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.txFilterCategory = btn.dataset.cat || null;
+        wrap.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('active', b === btn));
+        this.renderTxHistory();
+      });
+    });
+  },
+
+  getFilteredTxs() {
+    return this.state.transactions
+      .filter(tx => {
+        if (this.txFilterAccount && tx.account !== this.txFilterAccount && tx.toAccount !== this.txFilterAccount) return false;
+        if (this.txFilterMonth && !tx.date.startsWith(this.txFilterMonth)) return false;
+        if (this.txFilterType && tx.type !== this.txFilterType) return false;
+        if (this.txFilterCategory && tx.category !== this.txFilterCategory) return false;
+        if (this.txFilterText) {
+          const q   = this.txFilterText.toLowerCase();
+          const cat = this.getCategoryInfo(tx.category, tx.type);
+          const matches = (tx.note || '').toLowerCase().includes(q) || cat.label.toLowerCase().includes(q);
+          if (!matches) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => b.createdAt - a.createdAt);
+  },
+
+  renderTxHistory() {
+    const listEl = document.getElementById('tx-history-list');
+    const txs    = this.getFilteredTxs();
+
+    // Summary
+    let existing = document.getElementById('tx-filter-total');
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'tx-filter-total';
+      document.getElementById('tx-history-list').before(existing);
+    }
+
+    const totalInc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amountUSD, 0);
+    const totalExp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amountUSD, 0);
+    const net      = totalInc - totalExp;
+
+    existing.className = 'filter-total-card';
+    existing.innerHTML = txs.length
+      ? `<span class="ft-count">${txs.length} transacción${txs.length !== 1 ? 'es' : ''}</span>
+         ${totalInc ? `<span class="ft-inc">+${this.fmtUSD(totalInc)}</span>` : ''}
+         ${totalExp ? `<span class="ft-exp">-${this.fmtUSD(totalExp)}</span>` : ''}
+         ${totalInc && totalExp ? `<span class="ft-net" style="color:${net >= 0 ? 'var(--positive)' : 'var(--accent)'}">= ${net >= 0 ? '+' : ''}${this.fmtUSD(net)}</span>` : ''}`
+      : '';
+
     if (!txs.length) {
-      listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin transacciones</div>';
+      listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>Sin transacciones con estos filtros</div>';
       return;
     }
 
@@ -644,6 +755,93 @@ const App = {
     listEl.querySelectorAll('.tx-item').forEach((el, i) => {
       el.addEventListener('click', () => this.showTxDetail(txs[i]));
     });
+  },
+
+  // ── Calculator ────────────────────────────────────────────
+  showCalculator() {
+    const r = this.state.rates;
+    const rates = [
+      { key: 'bcvUsd',  label: 'BCV $',    val: r.bcvUsd  },
+      { key: 'bcvEur',  label: 'BCV €',    val: r.bcvEur  },
+      { key: 'paralelo',label: 'Paralelo', val: r.paralelo },
+    ];
+    let selRate = rates.find(r => r.val) || rates[0];
+    let people  = 1;
+
+    const render = (amt) => {
+      const rv = selRate.val;
+      if (!rv || isNaN(amt)) return { usdToVes: '--', vesToUsd: '--', perPerson: '--', perPersonVes: '--' };
+      const usdToVes    = (amt * rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const vesToUsd    = (amt / rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const perUSD      = amt / people;
+      const perPerson   = perUSD.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const perPersonV  = (perUSD * rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return { usdToVes, vesToUsd, perPerson, perPersonVes: perPersonV };
+    };
+
+    document.getElementById('modal-content').innerHTML = `
+      <div class="modal-title">🧮 Calculadora</div>
+
+      <div class="form-group">
+        <label>Monto</label>
+        <input type="number" id="calc-amount" class="form-input" placeholder="0,00" min="0" step="0.01" inputmode="decimal" />
+      </div>
+
+      <div class="calc-rate-btns">
+        ${rates.map(rt => `<button class="type-btn${selRate.key === rt.key ? ' active' : ''}" data-rkey="${rt.key}">${rt.label}${rt.val ? ` · Bs ${rt.val.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ' · --'}</button>`).join('')}
+      </div>
+
+      <div class="calc-result" id="calc-result">
+        <div class="calc-row"><span>$1 USD →</span><span id="cr-usd-ves">Bs --</span></div>
+        <div class="calc-row"><span>Bs 1 →</span><span id="cr-ves-usd">$ --</span></div>
+      </div>
+
+      <div class="form-group" style="margin-top:12px">
+        <label>Dividir entre</label>
+        <div class="calc-split-btns">
+          ${[1,2,3,4,5,6,7,8].map(n => `<button class="quick-btn${people === n ? ' selected' : ''}" data-people="${n}">${n}</button>`).join('')}
+        </div>
+      </div>
+      <div class="calc-result" id="calc-split-result" style="display:none">
+        <div class="calc-row"><b>Por persona</b><span id="cr-per-usd">$ --</span></div>
+        <div class="calc-row"><span>En Bs</span><span id="cr-per-ves">Bs --</span></div>
+      </div>
+
+      <button class="btn-secondary" id="modal-close" style="margin-top:16px">Cerrar</button>
+    `;
+
+    const update = () => {
+      const amt = parseFloat(document.getElementById('calc-amount').value) || 0;
+      const res = render(amt);
+      document.getElementById('cr-usd-ves').textContent = `Bs ${res.usdToVes}`;
+      document.getElementById('cr-ves-usd').textContent = `$${res.vesToUsd}`;
+      const splitEl = document.getElementById('calc-split-result');
+      splitEl.style.display = people > 1 && amt > 0 ? '' : 'none';
+      document.getElementById('cr-per-usd').textContent = `$${res.perPerson}`;
+      document.getElementById('cr-per-ves').textContent = `Bs ${res.perPersonVes}`;
+    };
+
+    document.getElementById('calc-amount').addEventListener('input', update);
+
+    document.querySelectorAll('[data-rkey]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selRate = rates.find(r => r.key === btn.dataset.rkey);
+        document.querySelectorAll('[data-rkey]').forEach(b => b.classList.toggle('active', b === btn));
+        update();
+      });
+    });
+
+    document.querySelectorAll('[data-people]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        people = parseInt(btn.dataset.people);
+        document.querySelectorAll('[data-people]').forEach(b => b.classList.toggle('selected', b === btn));
+        update();
+      });
+    });
+
+    document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
+    this.openModal();
+    setTimeout(() => document.getElementById('calc-amount')?.focus(), 100);
   },
 
   showAddAccountModal() {

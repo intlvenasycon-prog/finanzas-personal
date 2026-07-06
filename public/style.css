@@ -524,6 +524,87 @@ body {
   text-align: center;
 }
 
+/* ── Tx Filters ──────────────────────────────────────────── */
+.tx-filters-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.filter-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-row::-webkit-scrollbar { display: none; }
+.filter-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text2);
+  font-size: .75rem;
+  font-family: var(--font);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.filter-chip.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+.filter-total-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-size: .82rem;
+  flex-wrap: wrap;
+}
+.ft-count { color: var(--text3); flex: 1; min-width: 80px; }
+.ft-inc   { color: var(--positive); font-weight: 700; }
+.ft-exp   { color: var(--accent);   font-weight: 700; }
+.ft-net   { font-weight: 700; }
+
+/* ── Calculator ──────────────────────────────────────────── */
+.calc-rate-btns {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 12px;
+}
+.calc-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.calc-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: .88rem;
+}
+.calc-row span:last-child { font-weight: 700; }
+.calc-split-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* ── Modal ───────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
