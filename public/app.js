@@ -91,6 +91,129 @@ const PIE_COLORS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════
+   PIN AUTH
+═══════════════════════════════════════════════════════════ */
+const Auth = {
+  _key: 'finanzas_pin_v1',
+
+  async _hash(pin) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('fp:' + pin));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  hasPin()  { return !!localStorage.getItem(this._key); },
+  clearPin(){ localStorage.removeItem(this._key); },
+
+  async savePin(pin) {
+    localStorage.setItem(this._key, await this._hash(pin));
+  },
+
+  async verify(pin) {
+    const stored = localStorage.getItem(this._key);
+    if (!stored) return true;
+    return stored === await this._hash(pin);
+  },
+
+  showScreen(mode, onSuccess) {
+    const existing = document.getElementById('pin-screen');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.id = 'pin-screen';
+    el.innerHTML = `
+      <div class="pin-container">
+        <div class="pin-logo">💰</div>
+        <div class="pin-subtitle">${mode === 'setup' ? 'Crea tu PIN de acceso' : mode === 'confirm' ? 'Confirma tu PIN' : 'Ingresa tu PIN'}</div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+        </div>
+        <div class="pin-error" id="pin-error"></div>
+        <div class="pin-keypad">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k =>
+            k === '' ? '<div></div>' :
+            `<button class="pin-key" data-k="${k}">${k}</button>`
+          ).join('')}
+        </div>
+        ${mode === 'unlock' && this.hasPin() ? '<button class="pin-skip" id="pin-forgot">¿Olvidaste el PIN? Borrar datos</button>' : ''}
+      </div>`;
+    document.body.appendChild(el);
+
+    let entered = '';
+    let firstPin = '';
+
+    const dots = el.querySelectorAll('.pin-dot');
+    const errEl = el.querySelector('#pin-error');
+
+    const updateDots = () => dots.forEach((d, i) => d.classList.toggle('filled', i < entered.length));
+
+    const reset = (msg = '') => {
+      entered = '';
+      updateDots();
+      errEl.textContent = msg;
+    };
+
+    const submit = async () => {
+      if (mode === 'unlock') {
+        if (await this.verify(entered)) {
+          el.remove();
+          onSuccess();
+        } else {
+          reset('PIN incorrecto');
+        }
+      } else if (mode === 'setup') {
+        firstPin = entered;
+        reset();
+        // Switch to confirm mode
+        el.querySelector('.pin-subtitle').textContent = 'Confirma tu PIN';
+        mode = 'confirm';
+      } else if (mode === 'confirm') {
+        if (entered === firstPin) {
+          await this.savePin(entered);
+          el.remove();
+          onSuccess();
+        } else {
+          reset('Los PINs no coinciden');
+          mode = 'setup';
+          firstPin = '';
+          el.querySelector('.pin-subtitle').textContent = 'Crea tu PIN de acceso';
+        }
+      }
+    };
+
+    el.querySelectorAll('.pin-key').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const k = btn.dataset.k;
+        if (k === '⌫') {
+          entered = entered.slice(0, -1);
+          updateDots();
+        } else if (entered.length < 4) {
+          entered += k;
+          updateDots();
+          if (entered.length === 4) await submit();
+        }
+      });
+    });
+
+    el.querySelector('#pin-forgot')?.addEventListener('click', () => {
+      if (confirm('¿Borrar el PIN? Solo se eliminará el PIN, no tus datos.')) {
+        this.clearPin();
+        el.remove();
+        onSuccess();
+      }
+    });
+  },
+
+  async gate(onSuccess) {
+    if (!this.hasPin()) {
+      this.showScreen('setup', onSuccess);
+    } else {
+      this.showScreen('unlock', onSuccess);
+    }
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════
    STATE  (localStorage)
 ═══════════════════════════════════════════════════════════ */
 const State = {
@@ -411,6 +534,8 @@ const App = {
         this.closeModal();
         this.renderAll();
         this.toast('Transacción eliminada');
+        // Sync immediately so Sheets reflects the deletion before next pull
+        if (this.state.config.sheetsUrl) this.syncAll({ silent: true });
       }
     });
     document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
@@ -798,50 +923,57 @@ const App = {
   showCalculator() {
     const r = this.state.rates;
     const rates = [
-      { key: 'bcvUsd',  label: 'BCV $',    val: r.bcvUsd  },
-      { key: 'bcvEur',  label: 'BCV €',    val: r.bcvEur  },
-      { key: 'paralelo',label: 'Paralelo', val: r.paralelo },
+      { key: 'bcvUsd',   label: 'BCV $',    val: r.bcvUsd   },
+      { key: 'bcvEur',   label: 'BCV €',    val: r.bcvEur   },
+      { key: 'paralelo', label: 'Paralelo', val: r.paralelo },
     ];
-    let selRate = rates.find(r => r.val) || rates[0];
-    let people  = 1;
+    let selRate  = rates.find(rt => rt.val) || rates[0];
+    let people   = 1;
+    let mode     = 'usd'; // 'usd' = entro USD, 'ves' = entro Bs
 
-    const render = (amt) => {
+    const fmt = (n, dec = 2) => isNaN(n) ? '--' : n.toLocaleString('es-VE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+
+    const compute = (amt) => {
       const rv = selRate.val;
-      if (!rv || isNaN(amt)) return { usdToVes: '--', vesToUsd: '--', perPerson: '--', perPersonVes: '--' };
-      const usdToVes    = (amt * rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const vesToUsd    = (amt / rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const perUSD      = amt / people;
-      const perPerson   = perUSD.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const perPersonV  = (perUSD * rv).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      return { usdToVes, vesToUsd, perPerson, perPersonVes: perPersonV };
+      if (!rv || !amt) return null;
+      const usdAmt = mode === 'usd' ? amt : amt / rv;
+      const vesAmt = mode === 'usd' ? amt * rv : amt;
+      return { usdAmt, vesAmt, perUSD: usdAmt / people, perVES: vesAmt / people };
     };
 
-    document.getElementById('modal-content').innerHTML = `
+    const renderHTML = () => `
       <div class="modal-title">🧮 Calculadora</div>
 
+      <div class="calc-mode-toggle">
+        <button class="type-btn${mode === 'usd' ? ' active' : ''}" id="mode-usd">Entro $ USD</button>
+        <button class="type-btn${mode === 'ves' ? ' active' : ''}" id="mode-ves">Entro Bs</button>
+      </div>
+
       <div class="form-group">
-        <label>Monto</label>
-        <input type="number" id="calc-amount" class="form-input" placeholder="0,00" min="0" step="0.01" inputmode="decimal" />
+        <label id="calc-label">${mode === 'usd' ? 'Monto en USD' : 'Monto en Bs'}</label>
+        <input type="number" id="calc-amount" class="form-input"
+          placeholder="${mode === 'usd' ? '0,00 $' : '0,00 Bs'}"
+          min="0" step="0.01" inputmode="decimal" />
       </div>
 
       <div class="calc-rate-btns">
-        ${rates.map(rt => `<button class="type-btn${selRate.key === rt.key ? ' active' : ''}" data-rkey="${rt.key}">${rt.label}${rt.val ? ` · Bs ${rt.val.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ' · --'}</button>`).join('')}
+        ${rates.map(rt => `<button class="type-btn${selRate.key === rt.key ? ' active' : ''}" data-rkey="${rt.key}">${rt.label}${rt.val ? ` · Bs ${fmt(rt.val)}` : ' · --'}</button>`).join('')}
       </div>
 
       <div class="calc-result" id="calc-result">
-        <div class="calc-row"><span>$1 USD →</span><span id="cr-usd-ves">Bs --</span></div>
-        <div class="calc-row"><span>Bs 1 →</span><span id="cr-ves-usd">$ --</span></div>
+        <div class="calc-row"><span id="cr-label-a">${mode === 'usd' ? 'Equivale en Bs' : 'Equivale en USD'}</span><span id="cr-main">--</span></div>
+        <div class="calc-row" style="font-size:.75rem;color:var(--text3)"><span>Tasa</span><span id="cr-rate">Bs ${fmt(selRate.val)}</span></div>
       </div>
 
-      <div class="form-group" style="margin-top:12px">
+      <div class="form-group" style="margin-top:14px">
         <label>Dividir entre</label>
         <div class="calc-split-btns">
           ${[1,2,3,4,5,6,7,8].map(n => `<button class="quick-btn${people === n ? ' selected' : ''}" data-people="${n}">${n}</button>`).join('')}
         </div>
       </div>
       <div class="calc-result" id="calc-split-result" style="display:none">
-        <div class="calc-row"><b>Por persona</b><span id="cr-per-usd">$ --</span></div>
-        <div class="calc-row"><span>En Bs</span><span id="cr-per-ves">Bs --</span></div>
+        <div class="calc-row"><b>Por persona en $</b><span id="cr-per-usd">--</span></div>
+        <div class="calc-row"><span>Por persona en Bs</span><span id="cr-per-ves">--</span></div>
       </div>
 
       <button class="btn-secondary" id="modal-close" style="margin-top:16px">Cerrar</button>
@@ -849,36 +981,51 @@ const App = {
 
     const update = () => {
       const amt = parseFloat(document.getElementById('calc-amount').value) || 0;
-      const res = render(amt);
-      document.getElementById('cr-usd-ves').textContent = `Bs ${res.usdToVes}`;
-      document.getElementById('cr-ves-usd').textContent = `$${res.vesToUsd}`;
+      const res = compute(amt);
+      const mainEl = document.getElementById('cr-main');
+      if (!res || !amt) {
+        mainEl.textContent = '--';
+        document.getElementById('calc-split-result').style.display = 'none';
+        return;
+      }
+      mainEl.textContent = mode === 'usd' ? `Bs ${fmt(res.vesAmt)}` : `$${fmt(res.usdAmt)}`;
+      document.getElementById('cr-rate').textContent = `Bs ${fmt(selRate.val)}`;
       const splitEl = document.getElementById('calc-split-result');
-      splitEl.style.display = people > 1 && amt > 0 ? '' : 'none';
-      document.getElementById('cr-per-usd').textContent = `$${res.perPerson}`;
-      document.getElementById('cr-per-ves').textContent = `Bs ${res.perPersonVes}`;
+      splitEl.style.display = people > 1 ? '' : 'none';
+      document.getElementById('cr-per-usd').textContent = `$${fmt(res.perUSD)}`;
+      document.getElementById('cr-per-ves').textContent = `Bs ${fmt(res.perVES)}`;
     };
 
-    document.getElementById('calc-amount').addEventListener('input', update);
+    const mount = () => {
+      document.getElementById('modal-content').innerHTML = renderHTML();
 
-    document.querySelectorAll('[data-rkey]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        selRate = rates.find(r => r.key === btn.dataset.rkey);
-        document.querySelectorAll('[data-rkey]').forEach(b => b.classList.toggle('active', b === btn));
-        update();
+      document.getElementById('calc-amount').addEventListener('input', update);
+
+      document.getElementById('mode-usd').addEventListener('click', () => { mode = 'usd'; mount(); });
+      document.getElementById('mode-ves').addEventListener('click', () => { mode = 'ves'; mount(); });
+
+      document.querySelectorAll('[data-rkey]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selRate = rates.find(rt => rt.key === btn.dataset.rkey);
+          document.querySelectorAll('[data-rkey]').forEach(b => b.classList.toggle('active', b === btn));
+          update();
+        });
       });
-    });
 
-    document.querySelectorAll('[data-people]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        people = parseInt(btn.dataset.people);
-        document.querySelectorAll('[data-people]').forEach(b => b.classList.toggle('selected', b === btn));
-        update();
+      document.querySelectorAll('[data-people]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          people = parseInt(btn.dataset.people);
+          document.querySelectorAll('[data-people]').forEach(b => b.classList.toggle('selected', b === btn));
+          update();
+        });
       });
-    });
 
-    document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
+      document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
+      setTimeout(() => document.getElementById('calc-amount')?.focus(), 100);
+    };
+
+    mount();
     this.openModal();
-    setTimeout(() => document.getElementById('calc-amount')?.focus(), 100);
   },
 
   showAddAccountModal() {
@@ -1077,6 +1224,16 @@ const App = {
       document.getElementById('import-file').click();
     });
     document.getElementById('import-file').addEventListener('change', e => this.importJSON(e));
+    document.getElementById('btn-change-pin').addEventListener('click', () => {
+      Auth.showScreen('setup', () => this.toast('PIN actualizado'));
+    });
+    document.getElementById('btn-remove-pin').addEventListener('click', () => {
+      if (confirm('¿Quitar el PIN? La app quedará sin protección.')) {
+        Auth.clearPin();
+        this.toast('PIN eliminado');
+      }
+    });
+
     document.getElementById('btn-clear-data').addEventListener('click', () => {
       if (confirm('¿Borrar TODOS los datos? Esta acción no se puede deshacer.')) {
         localStorage.removeItem('finanzas_data_v1');
@@ -1223,4 +1380,6 @@ const App = {
 /* ═══════════════════════════════════════════════════════════
    BOOT
 ═══════════════════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', () => {
+  Auth.gate(() => App.init());
+});

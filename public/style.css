@@ -676,6 +676,71 @@ body {
 .spinning { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Calculator mode toggle ──────────────────────────────── */
+.calc-mode-toggle {
+  display: flex;
+  gap: 6px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 14px;
+}
+
+/* ── PIN Screen ──────────────────────────────────────────── */
+#pin-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pin-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 24px;
+  width: 100%;
+  max-width: 320px;
+}
+.pin-logo   { font-size: 3rem; }
+.pin-subtitle { font-size: .95rem; font-weight: 600; color: var(--text2); text-align: center; }
+.pin-dots   { display: flex; gap: 16px; }
+.pin-dot    { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: transparent; transition: background .15s, border-color .15s; }
+.pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+.pin-error  { font-size: .82rem; color: var(--accent); min-height: 20px; text-align: center; }
+.pin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 10px;
+}
+.pin-key {
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 1.4rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .1s;
+}
+.pin-key:active { background: var(--surface2); }
+.pin-skip {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: .75rem;
+  cursor: pointer;
+  font-family: var(--font);
+  text-decoration: underline;
+  margin-top: 8px;
+}
+
 /* ── Scrollbar (desktop) ─────────────────────────────────── */
 @media (min-width: 480px) {
   #app { max-width: 430px; margin: 0 auto; box-shadow: var(--shadow-md); }
